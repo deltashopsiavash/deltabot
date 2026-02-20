@@ -22,6 +22,28 @@ if(!function_exists('resetUserFlow')){
 }
 
 // ------------------------------------------------------------
+// IMPORTANT: If user clicks any "menu" inline button while stuck
+// in a step-based flow, we must allow that callback to escape the flow.
+// (e.g. during "adminResBotsCreateUser" waiting for numeric owner id)
+// ------------------------------------------------------------
+if(isset($data) && is_string($data)){
+    $escapeCallbacks = [
+        // admin panels
+        'managePanel',
+        'adminResellerBots',
+        'adminResPlans',
+        'addResellerPlan',
+        // list & navigation
+        'adminResBotsList_0',
+        'adminResBotsCreate',
+    ];
+    // also allow paginated list routes
+    if(in_array($data, $escapeCallbacks, true) || preg_match('/^adminResBotsList_\d+$/', $data)){
+        resetUserFlow();
+    }
+}
+
+// ------------------------------------------------------------
 // PRE-ROUTER (IMPORTANT)
 // This block must run BEFORE any step-based flows, otherwise
 // users can get stuck in a previous step (e.g. waiting for numeric
@@ -39,14 +61,20 @@ if(isset($text) && is_string($text)){
         // allow normal /start handler to run later
     }
 
-    // Always allow admin to cancel any flow
-    if($t0 === '😪 منصرف شدم بیخیال' || $t0 === 'منصرف شدم بیخیال 😪' || $t0 === 'منصرف شدم بیخیال'){
+    // Always allow admin to cancel any flow (be tolerant to emoji/order)
+    if(
+        $t0 === '😪 منصرف شدم بیخیال' || $t0 === 'منصرف شدم بیخیال 😪' || $t0 === 'منصرف شدم بیخیال' ||
+        (mb_strpos($t0, 'منصرف') !== false && mb_strpos($t0, 'بیخیال') !== false)
+    ){
         resetUserFlow();
-        $data = 'adminResellerBots';
+        // back to admin panel
+        $data = 'managePanel';
     }
 
     // Admin: map text buttons to routes + reset step/temp
-    if(($from_id == $admin || (($userInfo['isAdmin'] ?? false) == true)) && (empty($data) || $data === null)){
+    // IMPORTANT: do not require empty($data). Some installs keep stale callback_data in memory
+    // or run pre-router after other parsers; we want text buttons to always win.
+    if(($from_id == $admin || (($userInfo['isAdmin'] ?? false) == true))){
 
         // Management of reseller bots
         if(
@@ -60,19 +88,34 @@ if(isset($text) && is_string($text)){
             $data = 'adminResellerBots';
         }
 
-        // Plans
-        if($t0 === 'پلن های نمایندگی' || $t0 === '📦 پلن های نمایندگی' || $t0 === 'پلن های نمایندگی 📦' || $t0 === 'مدیریت پلن های نمایندگی' || $t0 === 'پلن‌های نمایندگی' || $t0 === 'پلن‌های نمایندگی 📦'){
+        // Plans (tolerant)
+        if(
+            $t0 === 'پلن های نمایندگی' || $t0 === '📦 پلن های نمایندگی' || $t0 === 'پلن های نمایندگی 📦' || $t0 === 'مدیریت پلن های نمایندگی' || $t0 === 'پلن‌های نمایندگی' || $t0 === 'پلن‌های نمایندگی 📦' ||
+            (mb_strpos($t0, 'پلن') !== false && mb_strpos($t0, 'نمایندگی') !== false && mb_strpos($t0, 'افزودن') === false)
+        ){
             resetUserFlow();
             // unify route name
             $data = 'adminResPlans';
         }
-        if($t0 === 'افزودن پلن' || $t0 === '➕ افزودن پلن' || $t0 === '➕ افزودن پلن نمایندگی' || $t0 === 'افزودن پلن نمایندگی' || $t0 === 'افزودن پلن نمایندگی +' || $t0 === '➕ افزودن پلن نمایندگی +' || $t0 === 'افزودن پلن نمایندگی➕'){
+        if(
+            $t0 === 'افزودن پلن' || $t0 === '➕ افزودن پلن' || $t0 === '➕ افزودن پلن نمایندگی' || $t0 === 'افزودن پلن نمایندگی' || $t0 === 'افزودن پلن نمایندگی +' || $t0 === '➕ افزودن پلن نمایندگی +' || $t0 === 'افزودن پلن نمایندگی➕' ||
+            (mb_strpos($t0, 'افزودن') !== false && mb_strpos($t0, 'پلن') !== false)
+        ){
             resetUserFlow();
             $data = 'addResellerPlan';
         }
 
+        // List reseller bots (tolerant)
+        if(
+            $t0 === '📋 لیست ربات ها' || $t0 === 'لیست ربات ها' || $t0 === 'لیست ربات ها 📋' || $t0 === 'لیست ربات‌ها' ||
+            (mb_strpos($t0,'لیست') !== false && mb_strpos($t0,'ربات') !== false)
+        ){
+            resetUserFlow();
+            $data = 'adminResBotsList_0';
+        }
+
         // Inside admin reseller bots menu
-        if($t0 === '📋 لیست ربات ها' || $t0 === 'لیست ربات ها 📋' || $t0 === 'لیست ربات‌ها 📋' || $t0 === 'لیست ربات‌ها'){
+        if($t0 === '📋 لیست ربات ها' || $t0 === 'لیست ربات ها 📋' || $t0 === 'لیست ربات‌ها 📋' || $t0 === 'لیست ربات‌ها' || $t0 === 'لیست ربات ها'){
             resetUserFlow();
             $data = 'adminResBotsList_0';
         }
@@ -84,7 +127,7 @@ if(isset($text) && is_string($text)){
         // Back (legacy)
         if($t0 === '🔙 بازگشت به پنل مدیریت' || $t0 === 'بازگشت به پنل مدیریت'){
             resetUserFlow();
-            $data = 'adminMenu';
+            $data = 'managePanel';
         }
     }
 }
@@ -517,6 +560,7 @@ if(($from_id == $admin || ($userInfo['isAdmin'] ?? false) == true) && (empty($da
         $t === 'مدیریت ربات ها 🤖' || $t === '🤖 مدیریت ربات ها' || $t === 'مدیریت ربات ها' ||
         $t === 'مدیریت ربات‌ها' || $t === '🤖 مدیریت ربات‌ها'
     ){
+        resetUserFlow();
         $data = 'adminResellerBots';
     }
 
@@ -527,14 +571,15 @@ if(($from_id == $admin || ($userInfo['isAdmin'] ?? false) == true) && (empty($da
     }
     if($t === 'پلن های نمایندگی' || $t === '📦 پلن های نمایندگی' || $t === 'مدیریت پلن های نمایندگی' || $t === 'پلن‌های نمایندگی'){
         setUser('none','step');
-        $data = 'adminResellerPlans';
+        // unify route name to the actual handler below
+        $data = 'adminResPlans';
     }
     if($t === 'بکاپ 🗄' || $t === '🗄 بکاپ' || $t === 'بکاپ' || $t === 'مدیریت بکاپ 🗄' || $t === 'مدیریت بکاپ'){
         $data = 'adminBackupMenu';
     }
 
     // Admin reseller bots menu (reply keyboard fallbacks)
-    if($t === '📋 لیست ربات ها'){
+    if($t === '📋 لیست ربات ها' || $t === 'لیست ربات ها' || $t === 'لیست ربات ها 📋' || $t === 'لیست ربات‌ها'){
         $data = 'adminResBotsList_0';
     }
     if($t === '➕ ساخت ربات جدید' || $t === '➕ ساخت ربات'){
@@ -542,7 +587,7 @@ if(($from_id == $admin || ($userInfo['isAdmin'] ?? false) == true) && (empty($da
     }
     if($t === '🔙 بازگشت به پنل مدیریت' || $t === 'بازگشت به پنل مدیریت' || $t === '😪 منصرف شدم بیخیال' || $t === 'منصرف شدم بیخیال 😪' || $t === 'منصرف شدم بیخیال'){
         setUser('none','step');
-        $data = 'adminResellerBots';
+        $data = 'managePanel';
     }
 }
 
@@ -561,7 +606,7 @@ if(!($from_id == $admin || ($userInfo['isAdmin'] ?? false) == true) && (empty($d
 function smartSendOrEdit($msgId, $txt, $keys = null, $parse_mode = null){
     // If we have a callback context (inline button) we can edit the message.
     // If it's a normal text keyboard / message, we send a new message.
-    global $chat_id, $update;
+    global $chat_id;
 
     // Normalize reply markup
     $replyMarkup = null;
@@ -573,13 +618,7 @@ function smartSendOrEdit($msgId, $txt, $keys = null, $parse_mode = null){
         }
     }
 
-    $isCallback = false;
-    if(isset($update) && isset($update->callback_query) && !empty($update->callback_query)){
-        $isCallback = true;
-    }
-
-    if($isCallback && !empty($msgId)){
-
+    if(!empty($GLOBALS['data']) && !empty($msgId)){
         $p = [
             'chat_id' => $chat_id,
             'message_id' => $msgId,
@@ -634,7 +673,7 @@ $res = $connection->query("SELECT * FROM reseller_plans ORDER BY id DESC");
             [['text'=>'➕ افزودن پلن نمایندگی','callback_data'=>'addResellerPlan']],
             [['text'=>'🔄 فعال/غیرفعال کردن پلن','callback_data'=>'resellerPlanToggleMenu']],
             [['text'=>'🗑 حذف پلن','callback_data'=>'resellerPlanDeleteMenu']],
-            [['text'=>'😪 منصرف شدم بیخیال','callback_data'=>'adminResellerBots']]
+            [['text'=>'😪 منصرف شدم بیخیال','callback_data'=>'managePanel']]
         ]
     ];
     smartSendOrEdit($message_id, $msg, json_encode($ik));
@@ -731,7 +770,7 @@ if($data=='adminBackupMenu' && ($from_id == $admin || $userInfo['isAdmin'] == tr
         [['text'=>($enabled?"✅ بکاپ خودکار: روشن":"❌ بکاپ خودکار: خاموش"),'callback_data'=>'adminBackupToggle']],
         [['text'=>'📥 دریافت بکاپ الان','callback_data'=>'adminBackupGet']],
         [['text'=>'📤 افزودن/بازگردانی بکاپ','callback_data'=>'adminBackupRestore']],
-        [['text'=>$buttonValues['back'],'callback_data'=>'adminMenu']],
+        [['text'=>$buttonValues['back'],'callback_data'=>'managePanel']],
     ]];
     smartSendOrEdit($message_id, "🗄 مدیریت بکاپ\n\n- بکاپ خودکار: روزانه (در صورت فعال بودن)\n- دریافت بکاپ: همین الان فایل SQL ارسال می‌شود\n- بازگردانی: فایل SQL را ارسال کنید", $keys);
 }
@@ -1161,7 +1200,7 @@ if($data=='adminResellerBots' && ($from_id == $admin || $userInfo['isAdmin'] == 
         [['text'=>"➕ ساخت ربات جدید",'callback_data'=>"adminResBotsCreate"]],
         [['text'=>"📦 پلن های نمایندگی",'callback_data'=>"adminResPlans"]],
         [['text'=>"➕ افزودن پلن نمایندگی",'callback_data'=>"addResellerPlan"]],
-        [['text'=>"😪 منصرف شدم بیخیال",'callback_data'=>"adminMenu"]],
+        [['text'=>"😪 منصرف شدم بیخیال",'callback_data'=>"managePanel"]],
     ]];
     smartSendOrEdit($message_id, "🤖 مدیریت ربات ها\n\nیکی از گزینه‌ها را انتخاب کنید:", $keys);
 }
